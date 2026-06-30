@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Gello Hotel</title>
+  <style>
+    body { margin: 0; font-family: Arial; background: #1a1a2e; color: white; text-align: center; }
+    h1 { color: #e94560; margin: 20px; }
+    #login { padding: 50px; }
+    #login input { padding: 10px; font-size: 18px; border-radius: 5px; border: none; }
+    #login button { padding: 10px 20px; font-size: 18px; background: #e94560; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px; }
+    #game { display: none; }
+    #room { width: 800px; height: 450px; background: linear-gradient(135deg, #16213e, #0f3460); margin: 20px auto; position: relative; border: 3px solid #e94560; border-radius: 10px; overflow: hidden; cursor: crosshair; }
+    .player { position: absolute; width: 40px; transition: all 0.4s ease; text-align: center; pointer-events: none; }
+    .player .body { width: 40px; height: 40px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    .player .name { font-size: 12px; background: rgba(0,0,0,0.7); padding: 2px 6px; border-radius: 3px; margin-top: 4px; display: inline-block; }
+    .bubble { position: absolute; bottom: 75px; left: 50%; transform: translateX(-50%); background: white; color: black; padding: 6px 12px; border-radius: 15px; font-size: 13px; white-space: nowrap; animation: fade 4s forwards; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+    @keyframes fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+    #controls { width: 800px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+    #chatinput { flex: 1; padding: 10px; border-radius: 5px; border: none; font-size: 14px; }
+    #colorpicker { width: 50px; height: 40px; border: none; border-radius: 5px; cursor: pointer; background: none; }
+    .info { color: #aaa; font-size: 13px; margin: 10px; }
+  </style>
+</head>
+<body>
+  <div id="login">
+    <h1>🏨 Gello Hotel</h1>
+    <p>Bem-vindo! Escreve o teu nome:</p>
+    <input type="text" id="name" placeholder="O teu nome" maxlength="15">
+    <button onclick="entrar()">Entrar</button>
+  </div>
+
+  <div id="game">
+    <h1>🏨 Gello Hotel</h1>
+    <p class="info">💡 Clica no quarto para mover • Escreve para falar • Escolhe a cor →</p>
+    <div id="room"></div>
+    <div id="controls">
+      <input type="text" id="chatinput" placeholder="Escreve mensagem e carrega Enter...">
+      <input type="color" id="colorpicker" title="Muda a cor do teu boneco">
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    let socket;
+
+    function entrar() {
+      const name = document.getElementById('name').value || 'Anónimo';
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('game').style.display = 'block';
+      
+      socket = io();
+      socket.emit('join', name);
+
+      socket.on('players', (players) => {
+        const room = document.getElementById('room');
+        // guardar bolhas existentes
+        const oldBubbles = {};
+        document.querySelectorAll('.player').forEach(p => {
+          const b = p.querySelector('.bubble');
+          if (b) oldBubbles[p.id] = b.outerHTML;
+        });
+        
+        room.innerHTML = '';
+        for (const id in players) {
+          const p = players[id];
+          const div = document.createElement('div');
+          div.className = 'player';
+          div.id = 'p_' + id;
+          div.style.left = p.x + 'px';
+          div.style.top = p.y + 'px';
+          div.innerHTML = '<div class="body" style="background:' + p.color + '"></div><div class="name">' + p.name + '</div>';
+          if (oldBubbles['p_' + id]) div.innerHTML += oldBubbles['p_' + id];
+          room.appendChild(div);
+        }
+      });
+
+      socket.on('chat', (data) => {
+        const playerDiv = document.getElementById('p_' + data.id);
+        if (playerDiv) {
+          const old = playerDiv.querySelector('.bubble');
+          if (old) old.remove();
+          const bubble = document.createElement('div');
+          bubble.className = 'bubble';
+          bubble.textContent = data.msg;
+          playerDiv.appendChild(bubble);
+          setTimeout(() => bubble.remove(), 4000);
+        }
+      });
+
+      document.getElementById('room').addEventListener('click', (e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left - 20;
+        const y = e.clientY - rect.top - 30;
+        socket.emit('move', { x, y });
+      });
+
+      document.getElementById('chatinput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && e.target.value.trim()) {
+          socket.emit('chat', e.target.value);
+          e.target.value = '';
+        }
+      });
+
+      document.getElementById('colorpicker').addEventListener('change', (e) => {
+        socket.emit('color', e.target.value);
+      });
+    }
+  </script>
+</body>
+</html>
